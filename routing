@@ -1,0 +1,84 @@
+#!/bin/sh
+
+UPDOWN=$1
+dev=$2
+PWD_CFG=/jffs/configs/openvpn.d
+PWD_DNS=/jffs/configs/dnsmasq.d
+
+if [ $UPDOWN == up ]
+then
+
+    # Check for new domains in the cfg file
+#    while read domain; do
+#      cat $PWD_CFG/ipset.$dev | sed -i "/$domain/! s/=\//=\/$domain\//" $PWD_dns/ipset_$dev.conf
+#    done <$PWD_CFG/ipset.$dev
+
+  if [ -f /jffs/openvpn/$dev"_V4".ipset ]
+  then
+    logger "firewall" "Restoring IPSET V4 on $dev"
+#    ipset create $dev"_V4" hash:net family inet hashsize 1024 maxelem 65536
+    ipset restore $dev"_V4" < /jffs/openvpn/$dev"_V4".ipset
+    iptables -I PREROUTING -t mangle -m set --match-set $dev"_V4" dst -j MARK --set-mark ${dev/tun/100}
+  fi
+
+  if [ -f /jffs/openvpn/$dev"_V6".ipset ]
+  then
+    logger "firewall" "Restoring IPSET V6 on $dev"
+#    ipset create $dev"_V6" hash:net family inet hashsize 1024 maxelem 65536
+    ipset restore $dev"_V6" < /jffs/openvpn/$dev"_V6".ipset
+    ip6tables -I PREROUTING -t mangle -m set --match-set $dev"_V6" dst -j MARK --set-mark ${dev/tun/100}
+  fi
+
+    logger "firewall" "Applying Routing IPSETS on $dev"
+    ip rule add prio ${dev/tun/99} fwmark ${dev/tun/100} lookup ${dev/tun/100}
+    ip route add table ${dev/tun/100} default dev $dev
+
+  if [ -f $PWD_CFG/extip.$dev ]
+  then
+    logger "firewall" "Applying Routing IP'S on $dev"
+    while read ip; do
+      ip route add $ip dev $dev
+    done <$PWD_CFG/extip.$dev
+  fi
+
+#  if [-f $PWD_CFG/intip.$dev ]
+#  then
+#    while read ip; do
+#      #creat internal ips forced to tun
+#    done <$PWD_CFG/intip.$dev
+#  fi
+fi
+
+if [ $UPDOWN == down ]
+then
+
+  logger "firewall" "Saving IPSET on $dev"
+  ipset save $dev"_V4" > /jffs/openvpn/$dev"_V4".ipset
+  ipset save $dev"_V6" > /jffs/openvpn/$dev"_V6".ipset
+
+  logger "firewall" "Deleting IPSETS on $dev"
+  iptables -D PREROUTING -t mangle -m set --match-set $dev"_V4" dst -j MARK --set-mark ${dev/tun/100}
+  ip6tables -D PREROUTING -t mangle -m set --match-set $dev"_V6" dst -j MARK --set-mark ${dev/tun/100}
+  ip rule del prio ${dev/tun/99} fwmark ${dev/tun/100} lookup ${dev/tun/100}
+  ip route del table ${dev/tun/100} default dev $dev
+
+#  ipset delete $dev"_V4" hash:net family inet hashsize 1024 maxelem 65536
+#  ipset delete $dev"_V6" hash:net family inet hashsize 1024 maxelem 65536
+
+  if [ -f $PWD_CFG/extip.dev ]
+  then
+    logger "firewall" "Deleteing Routing IP'S on $dev"
+    while read ip; do
+      ip route del $ip dev $dev
+    done <$PWD_CFG/extip.$dev
+  fi
+
+#  if [ -f $PWD_CFG/intip.dev ]
+#  then
+#    logger "firewall" "Deleteing Routing IP'S on $dev"
+#    while read ip; do
+#      ip route del $ip dev $dev
+#    done <$PWD_CFG/intip.$dev
+#  fi
+
+fi

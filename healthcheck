@@ -1,0 +1,129 @@
+#!/bin/sh
+
+#
+# Usage PIA-port_forward up tun11
+#
+# Enable port forwarding when using Private Internet Access
+# And change the port in transmission
+#
+
+URL=google.com
+PWD=/jffs/scripts/firewall.d
+dev=$2
+HEARTBEAT=5 
+LOGLEVEL=3
+
+sleep 5
+
+error( )
+{
+  echo "$@" 1>&2
+  exit 1
+}
+
+error_and_usage( )
+{
+  echo "$@" 1>&2
+  usage_and_exit 1
+}
+
+usage( )
+{
+  echo "Usage:   `dirname $0`/$PROGRAM [Options] COMMAND Interface"
+  echo "Example: `dirname $0`/$PROGRAM test tun11"
+  echo ""
+  echo "where   Options:  -h --help       This menu"
+  echo "                  -v --version    Version"
+  echo "        COMMAND   up           	  Start Health Check"
+  echo "                  test            Test tunnel and restart if necessary"
+  echo "                  down            Stop Health Check"
+}
+
+usage_and_exit( )
+{
+  usage
+  exit $1
+}
+
+version( )
+{
+  echo "$PROGRAM version $VERSION"
+}
+
+HC_start()
+{
+#wait for tunnel to be up
+  while [ "$(nvram get "vpn_client"`echo $dev|cut -c5`"_state")" != "2" ];
+  do
+    sleep 5
+  done
+
+  #add cron to test port forwarding every $HEARTBEAT minutes
+  cru a "$dev"_"$PROGRAM" "*/$HEARTBEAT * * * * $PWD/$PROGRAM test $dev"
+#  echo "Healthcheck Stared: "$dev  | logger -t
+  logger -p $LOGLEVEL $PROGRAM: Started $dev every $HEARTBEAT minutes
+}
+
+
+HC_stop()
+{
+  cru d "$dev"_"$PROGRAM"
+  logger -p $LOGLEVEL $PROGRAM: Stopped $dev
+}
+
+HC_test()
+{
+  #test to see if vpn is up
+  if [ "$(nvram get "vpn_client"`echo $dev|cut -c5`"_state")" = "2" ]; then
+    ping -I $dev -W 3 -c 1 -q -s 8 $URL > /dev/null 2>&1
+    if [ $? -eq 0 ]
+      then
+	logger -p $LOGLEVEL $PROGRAM: Passed $dev 
+      else
+        logger -p $LOGLEVEL $PROGRAM: Failed $dev
+        service restart_vpnclient`echo $dev|cut -c5`
+        exit 0
+    fi
+  fi
+}
+
+
+EXITCODE=0
+PROGRAM=`basename $0`
+VERSION=1.0.1
+
+while test $# -gt 0
+do
+  case $1 in
+  --usage | --help | -h )
+    usage_and_exit 0
+    ;;
+  --version | -v )
+    version
+    exit 0
+    ;;
+  up )
+    HC_start
+    exit 0
+    ;;
+  down )
+    HC_stop
+    exit 0
+    ;;
+  restart )
+    HC_stop
+    HC_start
+    exit 0
+    ;;
+  test )
+    HC_test
+    exit 0
+    ;;
+  *)
+    error_and_usage "Unrecognized option: $1"
+    ;;
+  esac
+  shift
+done
+
+exit 0

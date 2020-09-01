@@ -1,0 +1,38 @@
+#!/bin/sh
+##EXAMPLE
+#port_knock SSH up 22 tcp 8881 7777 9991 30 
+
+#adapted from https://wiki.archlinux.org/index.php/Port_knocking#Port_knocking_with_iptables_only
+
+NAME=$1
+UPDOWN=$2
+PORT=$3
+PROTO=$4
+KNOCKP1=$5
+KNOCKP2=$6
+KNOCKP3=$7
+TIME=$8 
+
+if [ $UPDOWN == up ]
+  then logger "firewall" "Applying $NAME Port Knock rules"
+    iptables --new "$NAME"TRAFFIC --table nat
+    iptables --new "$NAME"INPUT --table nat
+    iptables --new "$NAME"INPUTTWO --table nat
+
+    iptables --append INPUT -j "$NAME"TRAFFIC iptables --append "$NAME"TRAFFIC -p icmp --icmp-type any -j ACCEPT
+    iptables --append "$NAME"TRAFFIC -m state --state ESTABLISHED,RELATED -j ACCEPT
+    iptables --append "$NAME"TRAFFIC -m state --state NEW -m $PROTO -p $PROTO --dport $PORT -m recent --rcheck --seconds $TIME --name "$NAME"2 -j ACCEPT
+    iptables --append "$NAME"TRAFFIC -m state --state NEW -m $PROTO -p $PROTO -m recent --name "$NAME"2 --remove -j DROP
+    iptables --append "$NAME"TRAFFIC -m state --state NEW -m $PROTO -p $PROTO --dport KNOCKP3 -m recent --rcheck --name "$NAME"1 -j "$NAME"INPUTTWO
+    iptables --append "$NAME"TRAFFIC -m state --state NEW -m $PROTO -p $PROTO -m recent --name "$NAME"1 --remove -j DROP
+    iptables --append "$NAME"TRAFFIC -m state --state NEW -m $PROTO -p $PROTO --dport KNOCKP2 -m recent --rcheck --name "$NAME"0 -j "$NAME"INPUT
+    iptables --append "$NAME"TRAFFIC -m state --state NEW -m $PROTO -p $PROTO -m recent --name "$NAME"0 --remove -j DROP
+    iptables --append "$NAME"TRAFFIC -m state --state NEW -m $PROTO -p $PROTO --dport KNOCKP1 -m recent --name "$NAME"0 --set -j DROP
+    iptables --append "$NAME"INPUT -m recent --name "$NAME"1 --set -j DROP
+    iptables --append "$NAME"INPUTTWO -m recent --name "$NAME"2 --set -j DROP
+    iptables --append "$NAME"TRAFFIC -j DROP
+  else logger "firewall" "Deleteing $NAME Port Knock rules"
+    iptables --delete "$NAME"TRAFFIC --table nat
+    iptables --delete "$NAME"INPUT --table nat
+    iptables --delete "$NAME"INPUTTWO --table nat
+fi

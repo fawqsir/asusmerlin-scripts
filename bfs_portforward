@@ -1,0 +1,31 @@
+#!/bin/sh
+
+##EXAMPLE
+#bfs_portforward QBELT up eth0 192.168.1.241 3443 udp 60 5
+
+NAME=$1
+UPDOWN=$2
+IFACE=$3
+SERVER=$4
+PORT=$5
+PROTO=$6
+SECONDS=$7
+HITCOUNT=$8 #max 20
+
+if [ $UPDOWN == up ]
+  then
+    logger "firewall" "Applying $NAME Brute Force rules"
+    # create a new chain $NAMEVSBFP
+    iptables --new "$NAME"VSBFP --table nat
+    # add rule: add the source IP to the $NAMEVS match list table using the 'recent' match extension
+    iptables --append "$NAME"VSBFP --table nat --match recent --set --name "$NAME"VS --rsource
+    # add rule: deny if address has been seen in the $NAMEVS match list more than $HITCOUNT times in the last $SECONDS seconds
+    iptables --append "$NAME"VSBFP --table nat --match recent --update --name "$NAME"VS --seconds $SECONDS --hitcount $HITCOUNT --rsource --jump RETURN
+    # add rule: forward packets on port $PORT to $SERVER using the DNAT target extension
+    iptables --append "$NAME"VSBFP --table nat --proto $PROTO --dport $PORT --match state --state NEW --jump DNAT --to-destination $SERVER
+    # add the chain created above to the VSERVER chain and apply to interface $IFACE (public interface)
+    iptables --insert VSERVER --table nat --in-interface $IFACE --proto $PROTO --dport $PORT --match state --state NEW --jump "$NAME"VSBFP
+  else
+    logger "firewall" "Deleteing $NAME Brute Force rules"
+    iptables --delete "$NAME"VSBFP --table nat
+fi

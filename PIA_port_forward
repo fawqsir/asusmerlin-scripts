@@ -1,0 +1,173 @@
+#!/bin/sh
+#
+# Need to install the following
+#   opkg install coreutils-sha256sum
+#   opkg install transmission-remote-openssl
+#
+# Usage PIA-port_forward up tun11
+#
+# Enable port forwarding when using Private Internet Access
+# And change the port in transmission
+#
+
+TRANSUSER=qnap
+TRANSPASS=Wnk77968
+TRANSHOST=192.168.1.242
+#TRANSGUI=192.168.1.241
+TRANSGUI=192.168.1.242
+TRANSPORT=49091
+dev=$2
+LOGLEVEL=3
+
+error( )
+{
+  echo "$@" 1>&2
+  exit 1
+}
+
+error_and_usage( )
+{
+  echo "$@" 1>&2
+  usage_and_exit 1
+}
+
+usage( )
+{
+  echo "Usage:   `dirname $0`/$PROGRAM [Options] COMMAND Interface"
+  echo "Example: `dirname $0`/$PROGRAM test tun11"
+  echo ""
+  echo "where   Options:  -h --help       This menu"
+  echo "                  -v --version    Version"
+  echo "        COMMAND   start           Start PIA port forward and create iptables"
+  echo "                  up              Creat PIA port iptables for existing port forward"
+  echo "                  down            Delete PIA port forward iptables"
+  echo "                  test            Test PIA port forward via transmission and restart if necessary"
+  echo "                  status          Show the status of the port with no restart"
+}
+
+usage_and_exit( )
+{
+  usage
+  exit $1
+}
+
+version( )
+{
+  echo "$PROGRAM version $VERSION"
+}
+
+PIA_start()
+{
+#wait for tunnel to be up
+  while [ "$(nvram get "vpn_client"`echo $dev|cut -c5`"_state")" != "2" ];
+  do
+    sleep 1
+  done
+
+#port_forward_assignment
+  CLIENT_ID=`head -n 100 /dev/urandom | sha256sum | tr -d " -"`
+  PORT=$(curl --interface $dev "http://209.222.18.222:2000/\?client_id=$CLIENT_ID" 2>/dev/null | awk -F ':' '{ print $2 }'| awk -F '}' '{ print $1 }')
+# delete old port from file and add new port
+  echo $PORT > /tmp/port_forward.$dev
+  logger -p $LOGLEVEL Transmission Port: OPEN [$dev:$PORT]
+}
+
+PIA_up()
+{
+  PORT=$(cat /tmp/port_forward.$dev)
+#echo "Creating New Forwarding rules for port:"$PORT" on device "$dev" and forwading to "$TRANSHOST
+  iptables -I FORWARD -i $dev -p udp -d $TRANSHOST --dport $PORT -j ACCEPT
+  iptables -I FORWARD -i $dev -p tcp -d $TRANSHOST --dport $PORT -j ACCEPT
+  iptables -t nat -I PREROUTING -i $dev -p udp --dport $PORT -j DNAT --to-destination $TRANSHOST
+  iptables -t nat -I PREROUTING -i $dev -p tcp --dport $PORT -j DNAT --to-destination $TRANSHOST
+
+#transmission_change_port
+  transmission-remote $TRANSGUI:$TRANSPORT --auth $TRANSUSER:$TRANSPASS --port $PORT
+  transmission-remote $TRANSGUI:$TRANSPORT --auth $TRANSUSER:$TRANSPASS --reannounce
+#add cron to test port forwarding every 15 minutes
+  cru a transmission_port_forward "*/15 * * * * /jffs/scripts/$PROGRAM test $dev"
+}
+
+PIA_down()
+{
+  PORT=$(cat /tmp/port_forward.$dev)
+#Delete iptables related to Port Forwarding
+  iptables -D FORWARD -i $dev -p udp -d $TRANSHOST --dport $PORT -j ACCEPT
+  iptables -D FORWARD -i $dev -p tcp -d $TRANSHOST --dport $PORT -j ACCEPT
+  iptables -t nat -D PREROUTING -i $dev -p udp --dport $PORT -j DNAT --to-destination $TRANSHOST
+  iptables -t nat -D PREROUTING -i $dev -p tcp --dport $PORT -j DNAT --to-destination $TRANSHOST
+#delete cron to test port forwarding every 15 minutes
+  cru d transmission_port_forward "*/15 * * * * /jffs/scripts/$PROGRAM test $dev"
+}
+
+PIA_test()
+{
+#test to see if vpn is up
+  if [ "$(nvram get "vpn_client"`echo $dev|cut -c5`"_state")" = "2" ]; then
+    #transmission_port_test
+    port_test=`echo $(transmission-remote $TRANSGUI:$TRANSPORT --auth $TRANSUSER:$TRANSPASS --port-test)|cut -c15`
+
+#      if [ $port_test = Y ]; then
+#      logger -p $LOGLEVEL Transmission Port: OPEN [$dev:`cat /tmp/port.forward`]
+      if [ $port_test != "Y" ]; then
+       #echo "port is closed"
+       logger -p $LOGLEVEL Transmission Port is: Closed [$dev]
+       service restart_vpnclient`echo $dev|cut -c5`
+      fi
+  fi
+}
+
+PIA_status()
+{
+  echo $(transmission-remote $TRANSGUI:$TRANSPORT --auth $TRANSUSER:$TRANSPASS --port-test)
+  echo "Private Internet Access has forwared Port: `cat /tmp/port_forward.$dev`"
+}
+
+EXITCODE=0
+PROGRAM=`basename $0`
+VERSION=1.0.1
+
+while test $# -gt 0
+do
+  case $1 in
+  --usage | --help | -h )
+    usage_and_exit 0
+    ;;
+  --version | -v )
+    version
+    exit 0
+    ;;
+  start )
+    PIA_start
+    PIA_up
+    exit 0
+    ;;
+  restart )
+    PIA_down
+    PIA_start
+    exit 0
+    ;;
+  up )
+    PIA_up
+    exit 0
+    ;;
+  down )
+    PIA_down
+    exit 0
+    ;;
+  test )
+    PIA_test
+    exit 0
+    ;;
+  status )
+    PIA_status
+    exit 0
+    ;;
+  *)
+    error_and_usage "Unrecognized option: $1"
+    ;;
+  esac
+  shift
+done
+
+exit 0
