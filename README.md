@@ -2,7 +2,7 @@
 
 These files are ones that I regularly use on my Asus Merlin AC68U
 
-## Brute Force protection Port Forwarding
+## Brute Force Protection Port Forwarding
 **bfs_portforward** is for Brute Force protection Port Forwarding. 
 Just add this to your scripts folder and in *nat-start* add a line such as 
 `bfs_portforward HTTP up eth0 http 80 tcp 60 15`
