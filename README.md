@@ -15,6 +15,6 @@ In the *openvpn down script* add
 `healthcheck down $dev`
 
 ## Port Knocking
-**Port_Knocking** is just for a little bit of security when opening up certain ports.
+**Port_Knock** is just for a little bit of security when opening up certain ports.
 Just add this to your scripts folder. in your *firewall-start* add a line such as
 `port_knock SSH up 22 tcp 8881 7777 9991 30`
