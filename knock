@@ -4,7 +4,7 @@
 # nmap must be installed
 
 # usage
-# knock ssh host root 777 888 999
+# knock ssh host root udp 777 888 999
 
 PROG=$1
 HOST=$2
