@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# based on https://wiki.archlinux.org/index.php/Port_knocking#Client_script
 # nmap must be installed
 
 # usage
