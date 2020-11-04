@@ -17,8 +17,8 @@ if [ $TCPUDP == udp ] || [ $TCPUDP == UDP ] ;then
         PROTO=sT
 fi
 
-shift
 for ARG in "$@"
 do
+        map -Pn -$PROTO --host-timeout 100 --max-retries 0 -p $ARG $HOST
 done
 $PROG $USER@$HOST
