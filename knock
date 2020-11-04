@@ -9,9 +9,16 @@
 PROG=$1
 HOST=$2
 USER=$3
+TCPUDP=$4
+
+if [ $TCPUDP == udp ] || [ $TCPUDP == UDP ] ;then
+        PROTO=sU
+  else
+        PROTO=sT
+fi
+
 shift
 for ARG in "$@"
 do
-        nmap -Pn --host-timeout 100 --max-retries 0 -p $ARG $HOST
 done
 $PROG $USER@$HOST
