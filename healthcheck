@@ -3,8 +3,7 @@
 #
 # Usage healthcheck up tun11
 #
-# Enable port forwarding when using Private Internet Access
-# And change the port in transmission
+# tests if connection is open
 #
 
 URL=google.com
